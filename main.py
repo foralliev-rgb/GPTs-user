@@ -1,87 +1,105 @@
+import telebot
 import os
-import asyncio
-from typing import List
+from dotenv import load_dotenv
+from telebot import types
 
-import openai
-from telegram import Update
-from telegram.ext import ApplicationBuilder, ContextTypes, CommandHandler, MessageHandler, filters
+load_dotenv()  # Загружаем .env файл
 
-# Настройки: перед запуском установите переменные окружения TELEGRAM_TOKEN и OPENAI_API_KEY
-TELEGRAM_TOKEN = os.environ.get("8350490142:AAFO-sVQt9094ogGknUakgt_zqUEO23PQm4")
-OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
-openai.api_key = OPENAI_API_KEY
+bot = telebot.TeleBot(os.getenv("BOT_TOKEN"))
 
-# Простейший набор ключевых слов для определения, относится ли вопрос к магазину
-ALLOWED_KEYWORDS: List[str] = [
-    "товар", "цена", "цены", "доставка", "возврат", "гарантия", "заказ", "наличие",
-    "оплата", "самовывоз", "работа", "режим", "скидк", "купить", "ассортимент",
-    "магазин", "менеджер", "доставка", "служба поддержки", "pickup"
-]
+# Простая "база данных" GPT-агентов
+GPT_PRODUCTS = {
+    "GPT Start": {
+        "описание": "Базовый агент для чата и ответов на вопросы.",
+        "цена": "10 у.е./мес"
+    },
+    "GPT Pro": {
+        "описание": "Продвинутый агент с возможностью интеграции в Telegram и CRM.",
+        "цена": "50 у.е./мес"
+    },
+    "GPT Business": {
+        "описание": "Многофункциональный агент для бизнеса, аналитики и поддержки клиентов.",
+        "цена": "100 у.е./мес"
+    }
+}
 
-SYSTEM_PROMPT = (
-    "Вы — менеджер магазина. Отвечайте кратко, профессионально и по существу на вопросы, "
-    "связанные только с работой магазина (товары, цены, доставка, возврат, оплата, режим работы и т.п.). "
-    "Если вопрос НЕ относится к теме магазина — вежливо откажите, написав: "
-    "'Извините, я могу отвечать только на вопросы, связанные с магазином.'"
-)
+# Ключевые слова для определения релевантных сообщений
+GPT_KEYWORDS = ["gpt", "агент", "бот", "assistant", "чат", "модель", "продажа", "купить", "стоимость", "менеджер"]
 
-def message_is_store_related(text: str) -> bool:
-    t = text.lower()
-    for kw in ALLOWED_KEYWORDS:
-        if kw in t:
-            return True
-    return False
+# Главное меню
+def main_menu():
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    btn1 = types.KeyboardButton("🛍️ Каталог GPT-агентов")
+    btn2 = types.KeyboardButton("💰 Цены")
+    btn3 = types.KeyboardButton("📞 Контакты")
+    btn4 = types.KeyboardButton("❓ Консультация")
+    markup.add(btn1, btn2)
+    markup.add(btn3, btn4)
+    return markup
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        "Я — менеджер магазина (бот). Задавайте вопросы о товарах, ценах, доставке, возвратах и т.д."
+# Стартовое сообщение
+@bot.message_handler(commands=["start"])
+def start(message):
+    bot.send_message(
+        message.chat.id,
+        "Здравствуйте! 👋 Я менеджер магазина GPT’s-агентов.\n"
+        "Я помогу подобрать подходящего агента под ваши задачи.\n"
+        "Выберите интересующий раздел ниже:",
+        reply_markup=main_menu()
     )
 
-async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Вопросы только по теме магазина. Пример: 'Какая цена на товар X?'")
+# Обработка кнопок меню
+@bot.message_handler(func=lambda message: True)
+def handle_menu(message):
+    text = message.text.lower()
 
-async def ask_openai(user_text: str) -> str:
-    try:
-        resp = openai.ChatCompletion.create(
-            model="gpt-4",  # при необходимости замените модель
-            messages=[
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": user_text}
-            ],
-            max_tokens=500,
-            temperature=0.2
+    # Каталог
+    if "каталог" in text:
+        response = "🧠 Доступные GPT-агенты:\n\n"
+        for name, info in GPT_PRODUCTS.items():
+            response += f"**{name}**\n{info['описание']}\n💰 {info['цена']}\n\n"
+        bot.send_message(message.chat.id, response, parse_mode="Markdown")
+
+    # Цены
+    elif "цены" in text or "стоимость" in text:
+        bot.send_message(
+            message.chat.id,
+            "💰 Наши GPT-агенты по подписке:\n"
+            "• GPT Start — 10 у.е./мес\n"
+            "• GPT Pro — 50 у.е./мес\n"
+            "• GPT Business — 100 у.е./мес\n"
+            "\nВыберите подходящий в разделе 'Каталог'."
         )
-        return resp["choices"][0]["message"]["content"].strip()
-    except Exception as e:
-        return "Произошла ошибка при запросе к языковой модели."
 
-async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_text = update.message.text or ""
-    if not user_text.strip():
-        await update.message.reply_text("Пожалуйста, задайте вопрос.")
-        return
+    # Контакты
+    elif "контакты" in text:
+        bot.send_message(
+            message.chat.id,
+            "📞 Связаться с менеджером:\nTelegram: @gptshop_support\nEmail: support@gptshop.ai"
+        )
 
-    if not message_is_store_related(user_text):
-        await update.message.reply_text("Извините, я могу отвечать только на вопросы, связанные с магазином.")
-        return
+    # Консультация
+    elif "консультация" in text:
+        bot.send_message(
+            message.chat.id,
+            "🗣 Напишите, для каких целей вам нужен GPT-агент — и я помогу подобрать лучший вариант!"
+        )
 
-    await update.message.chat.send_action(action="typing")
-    answer = await asyncio.get_event_loop().run_in_executor(None, lambda: asyncio.run(ask_openai(user_text)))
-    await update.message.reply_text(answer)
+    # Проверка на релевантность темы
+    elif any(keyword in text for keyword in GPT_KEYWORDS):
+        bot.send_message(
+            message.chat.id,
+            "Я рад, что вы интересуетесь нашими GPT-агентами! 💡\n"
+            "Могу рассказать про функции, стоимость или интеграцию."
+        )
 
-def main():
-    if not TELEGRAM_TOKEN or not OPENAI_API_KEY:
-        print("Нужно задать переменные окружения TELEGRAM_TOKEN и OPENAI_API_KEY")
-        return
+    # Если вопрос не по теме — бот отказывает
+    else:
+        bot.send_message(
+            message.chat.id,
+            "Извините 🙏, я консультирую только по вопросам, связанным с GPT-агентами.\n"
+            "Пожалуйста, выберите пункт из меню."
+        )
 
-    app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("help", help_command))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-
-    print("Бот запущен...")
-    app.run_polling()
-
-if __name__ == "__main__":
-    main()
-
+# Запуск бота
+bot.polling(none_stop=True, interval=0)
