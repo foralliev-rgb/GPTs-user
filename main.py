@@ -1,105 +1,117 @@
-import telebot
-import os
-from dotenv import load_dotenv
-from telebot import types
+import asyncio
+from aiogram import Bot, Dispatcher, types
+from aiogram.filters import Command
+from aiogram.utils.keyboard import InlineKeyboardBuilder
+from aiogram.fsm.context import FSMContext
+from aiogram.fsm.state import State, StatesGroup
 
-load_dotenv()  # Загружаем .env файл
+# 🔹 Укажи свой токен и ID (куда бот будет отправлять заявки)
+API_TOKEN = "8478841875:AAGg0XIIbQ_OamBOHW3TEYRe_WODE7A4KuE"
+ADMIN_ID = @IEvgeniyV  # ← замени на свой Telegram ID (можно узнать у @userinfobot)
 
-bot = telebot.TeleBot(os.getenv("BOT_TOKEN"))
+bot = Bot(token=API_TOKEN)
+dp = Dispatcher()
 
-# Простая "база данных" GPT-агентов
-GPT_PRODUCTS = {
-    "GPT Start": {
-        "описание": "Базовый агент для чата и ответов на вопросы.",
-        "цена": "10 у.е./мес"
-    },
-    "GPT Pro": {
-        "описание": "Продвинутый агент с возможностью интеграции в Telegram и CRM.",
-        "цена": "50 у.е./мес"
-    },
-    "GPT Business": {
-        "описание": "Многофункциональный агент для бизнеса, аналитики и поддержки клиентов.",
-        "цена": "100 у.е./мес"
-    }
-}
+# 🔹 FSM (машина состояний для заявки)
+class RequestForm(StatesGroup):
+    waiting_for_name = State()
+    waiting_for_topic = State()
+    waiting_for_contact = State()
 
-# Ключевые слова для определения релевантных сообщений
-GPT_KEYWORDS = ["gpt", "агент", "бот", "assistant", "чат", "модель", "продажа", "купить", "стоимость", "менеджер"]
+# 🔹 Вопросы и ответы
+qa_pairs = [
+    ("А что вообще происходит на консультации?",
+     "Это спокойная беседа. Ты рассказываешь, что волнует, а специалист помогает разобраться через символику карт. Всё без мистики — фокус на понимании себя."),
 
-# Главное меню
-def main_menu():
-    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    btn1 = types.KeyboardButton("🛍️ Каталог GPT-агентов")
-    btn2 = types.KeyboardButton("💰 Цены")
-    btn3 = types.KeyboardButton("📞 Контакты")
-    btn4 = types.KeyboardButton("❓ Консультация")
-    markup.add(btn1, btn2)
-    markup.add(btn3, btn4)
-    return markup
+    ("Это типа гадания?",
+     "Не совсем 🙂 Карты используются не для предсказаний, а для анализа. Они помогают взглянуть на ситуацию под новым углом и найти внутренние ответы."),
 
-# Стартовое сообщение
-@bot.message_handler(commands=["start"])
-def start(message):
-    bot.send_message(
-        message.chat.id,
-        "Здравствуйте! 👋 Я менеджер магазина GPT’s-агентов.\n"
-        "Я помогу подобрать подходящего агента под ваши задачи.\n"
-        "Выберите интересующий раздел ниже:",
-        reply_markup=main_menu()
+    ("С какими вопросами можно приходить?",
+     "С любыми: отношения, работа, выгорание, выбор пути. Всё, где важно разобраться и почувствовать уверенность."),
+
+    ("А если нет чёткого вопроса?",
+     "Так бывает часто. Во время разговора всё само проясняется. Иногда важно просто начать диалог, и понимание приходит само."),
+
+    ("Как проходит встреча?",
+     "Обычно онлайн — в Zoom или переписке. Специалист помогает сформулировать тему, выкладывает карты и обсуждает, что они могут символизировать."),
+]
+
+# 🔹 /start
+@dp.message(Command("start"))
+async def start(message: types.Message):
+    name = message.from_user.first_name or "друг"
+    kb = InlineKeyboardBuilder()
+    for i, (q, _) in enumerate(qa_pairs):
+        kb.button(text=q, callback_data=f"q_{i}")
+    kb.button(text="💌 Хочу консультацию", callback_data="consult")
+    kb.adjust(1)
+    await message.answer(
+        f"Привет, {name}! 👋\nЯ помогу тебе разобраться, как проходят консультации по Таро.\n\nВыбери вопрос или запишись на консультацию:",
+        reply_markup=kb.as_markup()
     )
 
-# Обработка кнопок меню
-@bot.message_handler(func=lambda message: True)
-def handle_menu(message):
-    text = message.text.lower()
+# 🔹 Ответы
+@dp.callback_query(lambda c: c.data.startswith("q_"))
+async def show_answer(callback: types.CallbackQuery):
+    i = int(callback.data.split("_")[1])
+    q, a = qa_pairs[i]
+    kb = InlineKeyboardBuilder()
+    kb.button(text="💌 Записаться", callback_data="consult")
+    kb.adjust(1)
+    await callback.message.answer(f"❓ <b>{q}</b>\n\n💬 {a}", parse_mode="HTML", reply_markup=kb.as_markup())
 
-    # Каталог
-    if "каталог" in text:
-        response = "🧠 Доступные GPT-агенты:\n\n"
-        for name, info in GPT_PRODUCTS.items():
-            response += f"**{name}**\n{info['описание']}\n💰 {info['цена']}\n\n"
-        bot.send_message(message.chat.id, response, parse_mode="Markdown")
+# 🔹 Начало заявки
+@dp.callback_query(lambda c: c.data == "consult")
+async def start_request(callback: types.CallbackQuery, state: FSMContext):
+    await callback.message.answer("Давай оформим короткую заявку 📝\n\nКак тебя зовут?")
+    await state.set_state(RequestForm.waiting_for_name)
 
-    # Цены
-    elif "цены" in text or "стоимость" in text:
-        bot.send_message(
-            message.chat.id,
-            "💰 Наши GPT-агенты по подписке:\n"
-            "• GPT Start — 10 у.е./мес\n"
-            "• GPT Pro — 50 у.е./мес\n"
-            "• GPT Business — 100 у.е./мес\n"
-            "\nВыберите подходящий в разделе 'Каталог'."
-        )
+# 🔹 Получаем имя
+@dp.message(RequestForm.waiting_for_name)
+async def get_name(message: types.Message, state: FSMContext):
+    await state.update_data(name=message.text)
+    await message.answer("О чём ты хочешь поговорить на консультации?")
+    await state.set_state(RequestForm.waiting_for_topic)
 
-    # Контакты
-    elif "контакты" in text:
-        bot.send_message(
-            message.chat.id,
-            "📞 Связаться с менеджером:\nTelegram: @gptshop_support\nEmail: support@gptshop.ai"
-        )
+# 🔹 Получаем тему
+@dp.message(RequestForm.waiting_for_topic)
+async def get_topic(message: types.Message, state: FSMContext):
+    await state.update_data(topic=message.text)
+    await message.answer("Как с тобой связаться? (например, @username или телефон)")
+    await state.set_state(RequestForm.waiting_for_contact)
 
-    # Консультация
-    elif "консультация" in text:
-        bot.send_message(
-            message.chat.id,
-            "🗣 Напишите, для каких целей вам нужен GPT-агент — и я помогу подобрать лучший вариант!"
-        )
+# 🔹 Получаем контакт и отправляем заявку админу
+@dp.message(RequestForm.waiting_for_contact)
+async def get_contact(message: types.Message, state: FSMContext):
+    await state.update_data(contact=message.text)
+    data = await state.get_data()
 
-    # Проверка на релевантность темы
-    elif any(keyword in text for keyword in GPT_KEYWORDS):
-        bot.send_message(
-            message.chat.id,
-            "Я рад, что вы интересуетесь нашими GPT-агентами! 💡\n"
-            "Могу рассказать про функции, стоимость или интеграцию."
-        )
+    # Формируем текст заявки
+    text = (
+        f"📩 <b>Новая заявка на консультацию</b>\n\n"
+        f"👤 Имя: {data['name']}\n"
+        f"💬 Тема: {data['topic']}\n"
+        f"📱 Контакт: {data['contact']}\n"
+        f"🔗 Пользователь: @{message.from_user.username or 'без никнейма'}"
+    )
 
-    # Если вопрос не по теме — бот отказывает
-    else:
-        bot.send_message(
-            message.chat.id,
-            "Извините 🙏, я консультирую только по вопросам, связанным с GPT-агентами.\n"
-            "Пожалуйста, выберите пункт из меню."
-        )
+    # Отправляем админу
+    await bot.send_message(ADMIN_ID, text, parse_mode="HTML")
 
-# Запуск бота
-bot.polling(none_stop=True, interval=0)
+    await message.answer(
+        "Спасибо! 🙌 Я передал заявку специалисту. Он свяжется с тобой в ближайшее время."
+    )
+    await state.clear()
+
+# 🔹 Остальные сообщения
+@dp.message()
+async def fallback(message: types.Message):
+    await message.answer("Я пока отвечаю только на вопросы о консультациях 🙂 Напиши /start, чтобы начать заново.")
+
+# 🔹 Запуск
+async def main():
+    print("🤖 Бот запущен.")
+    await dp.start_polling(bot)
+
+if __name__ == "__main__":
+    asyncio.run(main())
