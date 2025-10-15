@@ -6,7 +6,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 
 # 🔹 Укажи свой токен и ID (куда бот будет отправлять заявки)
-API_TOKEN = "YOUR_TELEGRAM_BOT_TOKEN"
+API_TOKEN = "8478841875:AAGg0XIIbQ_OamBOHW3TEYRe_WODE7A4KuE"
 ADMIN_ID = 123456789  # ← замени на свой Telegram ID (можно узнать у @userinfobot)
 
 bot = Bot(token=API_TOKEN)
