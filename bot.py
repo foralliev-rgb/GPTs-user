@@ -7,7 +7,7 @@ from telegram import Update
 from telegram.ext import ApplicationBuilder, ContextTypes, CommandHandler, MessageHandler, filters
 
 # Настройки: перед запуском установите переменные окружения TELEGRAM_TOKEN и OPENAI_API_KEY
-TELEGRAM_TOKEN = os.environ.get("8350490142:AAFO-sVQt9094ogGknUakgt_zqUEO23PQm4")
+TELEGRAM_TOKEN = os.environ.get("")
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
 openai.api_key = OPENAI_API_KEY
 
@@ -84,3 +84,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
